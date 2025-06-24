@@ -6,6 +6,7 @@ public class PlayerInputController : MonoBehaviour
 {
     public Vector2 MoveInput { get; private set; }
     public event Action OnAttack;
+    public event Action OnJump;
 
     private InputSystem_Actions inputActions;
     private InputSystem_Actions.PlayerActionActions playerActions;
@@ -18,7 +19,9 @@ public class PlayerInputController : MonoBehaviour
         playerActions.Move.performed += ctx => MoveInput = ctx.ReadValue<Vector2>();
         playerActions.Move.canceled += ctx => MoveInput = Vector2.zero;
 
-        playerActions.Attack.performed += ctx => OnAttack?.Invoke(); 
+        playerActions.Attack.performed += ctx => OnAttack?.Invoke();
+
+        playerActions.Jump.performed += ctx => OnJump?.Invoke();
     }
 
     void OnEnable()
