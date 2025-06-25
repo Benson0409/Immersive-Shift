@@ -12,8 +12,8 @@ public class PlayerMove : MonoBehaviour
     // --- 私有變數 ---
     private CharacterController controller;
     private PlayerInputController inputController; 
-    private Vector3 verticalVelocity;  
-
+    private Vector3 verticalVelocity;
+    private PlayerAttack playerAttack;
     private Animator playerAnimator;
 
     private bool isJump;
@@ -22,6 +22,7 @@ public class PlayerMove : MonoBehaviour
         controller = GetComponent<CharacterController>();
         inputController = GetComponent<PlayerInputController>();
         playerAnimator = GetComponent<Animator>();
+        playerAttack = GetComponent<PlayerAttack>();
     }
 
     private void OnEnable()
@@ -54,7 +55,13 @@ public class PlayerMove : MonoBehaviour
         // 從 PlayerInputController 獲取移動輸入
         Vector3 horizontalMoveDirection = cameraForward * inputController.MoveInput.y + cameraRight * inputController.MoveInput.x;
 
-        if (playerAnimator)
+        // --- 停止攻擊時的移動 ---
+        if (playerAttack && playerAttack.IsAttacking) // <-- 如果正在攻擊
+        {
+            horizontalMoveDirection = Vector3.zero; // <-- 設置水平移動方向為零
+            playerAnimator?.SetFloat("Speed", 0f); // <-- 確保 Animator 的 Speed 參數為零，讓它播放 Idle
+        }
+        else
         {
             playerAnimator.SetFloat("Speed", horizontalMoveDirection.magnitude * moveSpeed); 
         }

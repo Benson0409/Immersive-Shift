@@ -1,81 +1,142 @@
 using UnityEngine;
+using System;
 
 public class PlayerAttack : MonoBehaviour
 {
-    // --- 可在 Inspector 中調整的公開參數 ---
-    public float attackCooldown = 0.5f; // 攻擊冷卻時間
-    public float attackRange = 1.5f;    // 攻擊範圍
-    public float attackDamage = 10f;    // 攻擊傷害
-    public LayerMask attackableLayer;   // 可攻擊的 Layer (例如 Enemy Layer)
+    //避免攻擊移動
+    public bool IsAttacking { get; private set; }
+    private bool isCombo = false;
+
+    public float attackDamage = 10f; 
+    public LayerMask attackableLayer;
+    public GameObject attackHitbox;
 
     // --- 私有變數 ---
-    private PlayerInputController inputController; // 引用 PlayerInputController 腳本
-    private Animator playerAnimator;               // 引用 Animator 元件 (如果有的話)
-    private float lastAttackTime = -Mathf.Infinity; // 上次攻擊的時間點
+    private PlayerInputController inputController;
+    private Animator playerAnimator;
+
+    [SerializeField]private int currentComboStep = 0;
+    private bool canReceiveComboInput = false;
+
 
     void Awake()
     {
         inputController = GetComponent<PlayerInputController>();
-        // playerAnimator = GetComponent<Animator>(); // 如果沒有 Animator，會是 null
+        playerAnimator = GetComponentInChildren<Animator>();
+
+        if (attackHitbox)
+        {
+            attackHitbox.SetActive(false);
+        }
     }
 
     void OnEnable()
     {
-        inputController.OnAttack += TryAttack;
+        if (inputController)
+        {
+            inputController.OnAttack += HandleAttackInput;
+        }
     }
 
     void OnDisable()
     {
-        inputController.OnAttack -= TryAttack;
+        if (inputController)
+        {
+            inputController.OnAttack -= HandleAttackInput;
+        }
+    }
+    
+
+    // --- 處理攻擊輸入的方法 ---
+    private void HandleAttackInput()
+    {
+        if (playerAnimator == null) return;
+        
+        IsAttacking = true;
+        isCombo = false;
+        // 如果在可接受連擊輸入的窗口內
+        if (canReceiveComboInput)
+        {
+            // 如果當前在第一段或第二段連擊，嘗試進入下一段
+            if (currentComboStep >= 1 && currentComboStep < 3)
+            {
+                currentComboStep++;
+                isCombo = true;
+                Debug.Log($"Combo: 進入第 {currentComboStep} 段攻擊! (通過動畫窗口觸發)");
+                playerAnimator.SetInteger("ComboStep", currentComboStep);
+                return; 
+            }
+        }
+
+        // 如果不在連擊中，或不在可接受輸入窗口，則啟動第一段攻擊
+        if (currentComboStep == 0)
+        {
+            currentComboStep = 1;
+            Debug.Log("Combo: 啟動第一段攻擊!");
+            playerAnimator.SetTrigger("Attack");
+            playerAnimator.SetInteger("ComboStep", 1);
+            canReceiveComboInput = false;
+            
+        }
+
     }
 
-    private void TryAttack()
+    public float GetCurrentDamage()
     {
-        // 檢查攻擊冷卻時間
-        if (Time.time >= lastAttackTime + attackCooldown)
+        attackDamage = attackDamage + currentComboStep * 3;
+        return attackDamage;
+    }
+    
+    // --- 連擊重置方法 (由 Update 或動畫事件調用) ---
+    public void ResetCombo()
+    {
+        currentComboStep = 0; // 重置連擊階段為閒置
+        if (playerAnimator)
         {
-            lastAttackTime = Time.time;
-            Debug.Log("PlayerCombat: 攻擊動作觸發！ (待動畫事件執行實際判定)");
+            playerAnimator.SetInteger("ComboStep", 0);
+        }
 
-            // // 觸發攻擊動畫 (如果有的話)
-            // if (playerAnimator != null)
-            // {
-            //     playerAnimator.SetTrigger("Attack"); // 需要在 Animator Controller 中設定 "Attack" Trigger 參數
-            // }
-            //
-            // // *** 臨時性：這裡可以放一個 Invoke 來模擬動畫觸發攻擊判定 ***
-            // // *** 最終會用動畫事件來觸發 PerformAttack() ***
-            // Invoke("PerformAttack", 0.2f); // 假設動畫前搖 0.2 秒後進行判定
+        canReceiveComboInput = false; // 關閉所有輸入窗口
+        IsAttacking = false;
+        DisableHitbox();
+        Debug.Log("Combo: 連擊重置。");
+    }
+
+    // --- 動畫事件：開啟連擊輸入窗口 ---
+    // 這個方法將由動畫事件在每段攻擊動畫的特定點觸發
+    public void OpenComboInputWindow()
+    {
+        canReceiveComboInput = true;
+        Debug.Log($"Combo: 攻擊 {currentComboStep} 可接收連擊輸入窗口已開啟！");
+    }
+
+    // --- 動畫事件：關閉連擊輸入窗口 ---
+    public void CloseComboInputWindow()
+    {
+        canReceiveComboInput = false;
+    
+        // ResetCombo();
+        Debug.Log($"Combo: 攻擊 {currentComboStep} 可接收連擊輸入窗口已關閉！");
+    }
+
+    // --- 攻擊判定方法 (由動畫事件調用) ---
+    public void PerformAttack()
+    {
+        Debug.Log($"PlayerAttack: 執行攻擊判定！Hitbox啟用 ({currentComboStep})。");
+        if (attackHitbox != null)
+        {
+            attackHitbox.SetActive(true);
         }
     }
 
-    // 這個方法將來會由動畫事件調用
-    // public void PerformAttack()
-    // {
-    //     Debug.Log("PlayerCombat: 執行攻擊判定！");
-    //
-    //     // 使用球體檢測在角色前方查找敵人
-    //     Collider[] hitEnemies = Physics.OverlapSphere(
-    //         transform.position + transform.forward * attackRange * 0.5f, // 攻擊球體中心
-    //         attackRange * 0.5f,                                       // 攻擊球體半徑
-    //         attackableLayer);                                         // 只檢測特定 Layer
-    //
-    //     foreach (Collider enemyCollider in hitEnemies)
-    //     {
-    //         // 假設敵人有一個 EnemyHealth 腳本來處理傷害
-    //         EnemyHealth enemyHealth = enemyCollider.GetComponent<EnemyHealth>();
-    //         if (enemyHealth != null)
-    //         {
-    //             Debug.Log($"PlayerCombat: 擊中敵人: {enemyCollider.name}，造成 {attackDamage} 傷害。");
-    //             enemyHealth.TakeDamage(attackDamage);
-    //         }
-    //     }
-    // }
-    //
-    // // 可視化攻擊範圍 (僅在 Scene 視窗中顯示)
-    // void OnDrawGizmosSelected()
-    // {
-    //     Gizmos.color = Color.red;
-    //     Gizmos.DrawWireSphere(transform.position + transform.forward * attackRange * 0.5f, attackRange * 0.5f);
-    // }
+    // --- 禁用 Hitbox 方法 (由動畫事件調用) ---
+    public void DisableHitbox()
+    {
+        Debug.Log("PlayerAttack: 禁用 Hitbox。");
+        if (attackHitbox)
+        {
+            attackHitbox.SetActive(false); 
+        }
+    }
+
 }
